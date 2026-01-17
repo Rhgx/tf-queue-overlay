@@ -225,10 +225,18 @@ class ConsoleLogFollower:
 def format_mmss_mmm(seconds: float) -> str:
     seconds = max(0.0, seconds)
     total_ms = int(seconds * 1000.0)
-    mins = total_ms // 60000
-    secs = (total_ms % 60000) // 1000
+    total_secs = total_ms // 1000
+    hours = total_secs // 3600
+    mins = (total_secs % 3600) // 60
+    secs = total_secs % 60
     ms = total_ms % 1000
-    return f"{mins:02d}:{secs:02d}.{ms:03d}"
+
+    if hours > 0:
+        # HH:MM:SS.m format (single millisecond digit)
+        return f"{hours:02d}:{mins:02d}:{secs:02d}.{ms // 100}"
+    else:
+        # MM:SS.mmm format
+        return f"{mins:02d}:{secs:02d}.{ms:03d}"
 
 
 # -----------------------------
