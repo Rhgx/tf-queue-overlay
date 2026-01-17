@@ -39,15 +39,12 @@ DEFAULT_SETTINGS = {
 
 TF2_PROCESS_NAME = "tf_win64.exe"
 
-# Queue start => reset and start timing
 QUEUE_START_PATTERNS = [
     re.compile(r"^\[PartyClient\] Requesting queue for .*Casual Match\b"),
     re.compile(r"^\[PartyClient\] Entering queue for match group .*Casual Match\b"),
     re.compile(r"^\[ReliableMsg\] PartyQueueForMatch started\b"),
 ]
 
-# Match found (lobby assigned) => stop timing here
-# In your log, the earliest reliable signal is Leaving queue (you were assigned).
 MATCH_FOUND_PATTERNS = [
     re.compile(r"^\[PartyClient\] Leaving queue for match group .*Casual Match\b"),
     re.compile(r"^\[ReliableMsg\] AcceptLobbyInvite\b", re.IGNORECASE),
@@ -55,7 +52,6 @@ MATCH_FOUND_PATTERNS = [
     re.compile(r"^Differing lobby received\.", re.IGNORECASE),
 ]
 
-# Map is only known after connecting (from your sample logs)
 MAP_PATTERN = re.compile(r"^Map:\s*([A-Za-z0-9_]+)\s*$")
 
 
@@ -293,17 +289,14 @@ class OverlayWindow(QtWidgets.QWidget):
         self._load_font()
         self._build_ui()
 
-        # Poll log (events)
         self.poll_timer = QtCore.QTimer(self)
         self.poll_timer.timeout.connect(self.on_poll_tick)
         self.poll_timer.start(50)
 
-        # Refresh UI frequently
         self.ui_timer = QtCore.QTimer(self)
         self.ui_timer.timeout.connect(self._update_ui)
         self.ui_timer.start(16)
 
-        # Show/hide based on TF2 focus
         self.proc_timer = QtCore.QTimer(self)
         self.proc_timer.timeout.connect(self._sync_visibility_with_tf2)
         self.proc_timer.start(200)
@@ -415,13 +408,11 @@ class OverlayWindow(QtWidgets.QWidget):
             self._handle_line(line)
 
     def _handle_line(self, line: str):
-        # Only update map after we connect; harmless at any time
         m = MAP_PATTERN.match(line)
         if m:
             self.map_name = m.group(1)
             return
 
-        # Queue start => auto reset and start timing
         if any(p.search(line) for p in QUEUE_START_PATTERNS):
             self.status = "QUEUEING"
             self.queue_start_perf = time.perf_counter()
@@ -429,8 +420,6 @@ class OverlayWindow(QtWidgets.QWidget):
             self.map_name = None
             return
 
-        # Stop timing at the first "match found" signal (lobby assigned).
-        # IMPORTANT: only if we are currently queueing.
         if self.status == "QUEUEING" and self.queue_start_perf is not None:
             if any(p.search(line) for p in MATCH_FOUND_PATTERNS):
                 self.status = "MATCH FOUND"
@@ -531,6 +520,26 @@ def show_startup_message(tray: QtWidgets.QSystemTrayIcon) -> None:
 
 
 # -----------------------------
+# Missing console.log prompt
+# -----------------------------
+
+
+def show_missing_console_log_message(tf_dir: Optional[Path]) -> None:
+    tf_dir_text = str(tf_dir) if tf_dir else "(TF2 tf folder not found)"
+    text = (
+        "TF2 console.log was not found.\n\n"
+        "This program reads TF2's console.log, which is only created when TF2 is "
+        "launched with the launch option:\n\n"
+        "  -condebug\n\n"
+        "How to set it:\n"
+        "Steam -> Library -> Team Fortress 2 -> Properties -> General -> Launch Options\n"
+        "Add:  -condebug\n\n"
+        f"Expected location:\n{tf_dir_text}\\console.log"
+    )
+    QtWidgets.QMessageBox.warning(None, "TF2 Queue Timer", text)
+
+
+# -----------------------------
 # Main
 # -----------------------------
 
@@ -538,9 +547,10 @@ def show_startup_message(tray: QtWidgets.QSystemTrayIcon) -> None:
 def main():
     ensure_settings_file()
 
-    log_path = get_console_log_path()
-    if not log_path:
-        QtWidgets.QApplication([])
+    tf_dir = find_tf2_tf_dir()
+    if not tf_dir:
+        app = QtWidgets.QApplication([])
+        app.setWindowIcon(get_app_icon())
         QtWidgets.QMessageBox.critical(
             None,
             "TF2 Queue Timer",
@@ -549,10 +559,20 @@ def main():
         )
         sys.exit(1)
 
+    log_path = tf_dir / "console.log"
+
+    # If console.log doesn't exist, tell the user to add -condebug.
+    # (We do NOT auto-create it here, because without -condebug TF2 may never write it.)
+    if not log_path.exists():
+        app = QtWidgets.QApplication([])
+        app.setWindowIcon(get_app_icon())
+        show_missing_console_log_message(tf_dir)
+        sys.exit(1)
+
+    # Clear log at program start (as requested earlier)
     clear_console_log(log_path)
 
     try:
-        log_path.parent.mkdir(parents=True, exist_ok=True)
         log_path.touch(exist_ok=True)
     except Exception:
         pass
@@ -565,7 +585,6 @@ def main():
     window.hide()
 
     tray = build_tray(app, window)
-
     QtCore.QTimer.singleShot(400, lambda: show_startup_message(tray))
 
     sys.exit(app.exec())
