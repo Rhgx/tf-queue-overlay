@@ -15,10 +15,11 @@ The overlay automatically shows itself when the TF2 window is focused and hides 
 ## Usage
 
 1.  Ensure Team Fortress 2 is installed via Steam.
-2.  Run the executable (`TF2QueueTimer.exe`).
-3.  The program will run in the system tray.
-4.  Launch Team Fortress 2.
-5.  Join a casual queue to see the timer in action.
+2.  **Important**: Add `-condebug` to your TF2 launch options (Library -> Right-click TF2 -> Properties -> Launch Options).
+3.  Run the executable (`TF2QueueTimer.exe`).
+4.  The program will run in the system tray.
+5.  Launch Team Fortress 2.
+6.  Join a casual queue to see the timer in action.
 
 ## Configuration
 
