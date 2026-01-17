@@ -2,6 +2,10 @@
 
 A simple overlay utility for Team Fortress 2 that tracks how long you have been queueing for a match.
 
+> [!NOTE]
+> Windows may flag this program as suspicious because it is not digitally signed. You can verify the file determines it is safe on VirusTotal:
+> [VirusTotal Scan Result](https://www.virustotal.com/gui/file/dbd3f3e3441d8107873601de5b623f63ad1366515646d69e18f1781835dd41be/detection)
+
 ## How it Works
 
 The program monitors the Team Fortress 2 console log file to detect specific events:
