@@ -35,5 +35,6 @@ You can easily adjust the overlay settings directly from the program:
     - **Opacity**: The transparency level of the overlay.
     - **Font Size**: The size of the timer and map text.
     - **Position**: The [X, Y] coordinates of the overlay on your screen.
+    - **Save queue data to CSV**: When enabled, logs each queue session to `queue_log.csv`.
 
 Changes are saved automatically to `settings.json` in the application folder on every save.

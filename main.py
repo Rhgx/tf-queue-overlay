@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import atexit
+import csv
 import json
 import os
 import re
 import sys
 import time
 import winreg
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -37,7 +39,8 @@ FONT_PATH = DATA_DIR / "font.ttf"
 ICON_PATH = DATA_DIR / "icon.ico"
 LOCK_PATH = APP_DIR / ".lock"
 
-DEFAULT_SETTINGS = {"pos": [24, 24], "opacity": 0.5, "font_size": 22}
+DEFAULT_SETTINGS = {"pos": [24, 24], "opacity": 0.5, "font_size": 22, "save_csv": False}
+CSV_PATH = APP_DIR / "queue_log.csv"
 TF2_PROCESS_NAME = "tf_win64.exe"
 
 QUEUE_START_PATTERN = re.compile(
@@ -73,6 +76,24 @@ def save_settings(settings: dict) -> None:
 def ensure_settings_file() -> None:
     if not SETTINGS_PATH.exists():
         save_settings(DEFAULT_SETTINGS)
+
+
+def save_queue_to_csv(duration_seconds: float, map_name: Optional[str]) -> None:
+    """Append queue data to CSV file."""
+    try:
+        file_exists = CSV_PATH.exists()
+        with open(CSV_PATH, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(["timestamp", "duration_seconds", "duration_formatted", "map"])
+            writer.writerow([
+                datetime.now().isoformat(timespec="seconds"),
+                f"{duration_seconds:.3f}",
+                format_mmss_mmm(duration_seconds),
+                map_name or ""
+            ])
+    except Exception:
+        pass
 
 
 def is_tf2_focused() -> bool:
@@ -283,6 +304,12 @@ class SettingsDialog(QtWidgets.QDialog):
         pos_layout.addWidget(self.pos_y)
         layout.addWidget(pos_group)
         
+        # Save to CSV
+        self.csv_checkbox = QtWidgets.QCheckBox("Save queue data to CSV")
+        self.csv_checkbox.setChecked(self.settings.get("save_csv", False))
+        self.csv_checkbox.setToolTip("When enabled, saves queue time and map to queue_log.csv")
+        layout.addWidget(self.csv_checkbox)
+        
         # Buttons
         btn_layout = QtWidgets.QHBoxLayout()
         self.save_btn = QtWidgets.QPushButton("Save")
@@ -305,6 +332,7 @@ class SettingsDialog(QtWidgets.QDialog):
         self.settings["opacity"] = self.opacity_slider.value() / 100.0
         self.settings["font_size"] = self.font_slider.value()
         self.settings["pos"] = [self.pos_x.value(), self.pos_y.value()]
+        self.settings["save_csv"] = self.csv_checkbox.isChecked()
         
         self.overlay.settings = self.settings
         self.overlay.setWindowOpacity(self.settings["opacity"])
@@ -365,6 +393,8 @@ class OverlayWindow(QtWidgets.QWidget):
         self.proc_timer.timeout.connect(self._sync_visibility)
         self.proc_timer.start(500)
         self._sync_visibility()
+
+        self._pending_csv_duration: Optional[float] = None
 
     def _load_font(self):
         self.font_family = None
@@ -461,6 +491,15 @@ class OverlayWindow(QtWidgets.QWidget):
             self.last_match_found_seconds = time.perf_counter() - self.queue_start_perf
             self.queue_start_perf = None
             self._update_timers()
+            if self.settings.get("save_csv", False):
+                self._pending_csv_duration = self.last_match_found_seconds
+                QtCore.QTimer.singleShot(15000, self._save_pending_csv)
+
+    def _save_pending_csv(self):
+        """Save CSV after delay to allow map name detection."""
+        if self._pending_csv_duration is not None:
+            save_queue_to_csv(self._pending_csv_duration, self.map_name)
+            self._pending_csv_duration = None
 
     def _update_timers(self):
         if self.status == "QUEUEING":
