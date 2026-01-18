@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import re
@@ -14,50 +15,46 @@ import win32gui
 import win32process
 from PySide6 import QtCore, QtGui, QtWidgets
 
-# -----------------------------
-# Config / assets
-# -----------------------------
-
 
 def get_app_dir() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).parent
-    return Path(__file__).parent
+    """Directory for external files (settings.json). Next to the original exe."""
+    if hasattr(sys, "frozen"):  # PyInstaller
+        return Path(sys.executable).resolve().parent
+    exe_path = Path(sys.argv[0]).resolve()
+    if exe_path.suffix.lower() == ".exe":  # Nuitka
+        return exe_path.parent
+    return Path(__file__).resolve().parent  # Development
+
+
+def get_data_dir() -> Path:
+    """Directory for bundled assets (font.ttf, icon.ico)."""
+    if hasattr(sys, "_MEIPASS"):  # PyInstaller
+        return Path(sys._MEIPASS)
+    return Path(__file__).resolve().parent  # Nuitka or development
 
 
 APP_DIR = get_app_dir()
-
+DATA_DIR = get_data_dir()
 SETTINGS_PATH = APP_DIR / "settings.json"
-FONT_PATH = APP_DIR / "font.ttf"
-ICON_PATH = APP_DIR / "icon.ico"
+FONT_PATH = DATA_DIR / "font.ttf"
+ICON_PATH = DATA_DIR / "icon.ico"
+LOCK_PATH = APP_DIR / ".lock"
 
-DEFAULT_SETTINGS = {
-    "pos": [24, 24],
-    "opacity": 0.5,
-    "font_size": 22,
-}
-
+DEFAULT_SETTINGS = {"pos": [24, 24], "opacity": 0.5, "font_size": 22}
 TF2_PROCESS_NAME = "tf_win64.exe"
 
-QUEUE_START_PATTERNS = [
-    re.compile(r"^\[PartyClient\] Requesting queue for .*Casual Match\b"),
-    re.compile(r"^\[PartyClient\] Entering queue for match group .*Casual Match\b"),
-    re.compile(r"^\[ReliableMsg\] PartyQueueForMatch started\b"),
-]
-
-MATCH_FOUND_PATTERNS = [
-    re.compile(r"^\[PartyClient\] Leaving queue for match group .*Casual Match\b"),
-    re.compile(r"^\[ReliableMsg\] AcceptLobbyInvite\b", re.IGNORECASE),
-    re.compile(r"^Lobby created\s*$", re.IGNORECASE),
-    re.compile(r"^Differing lobby received\.", re.IGNORECASE),
-]
-
+QUEUE_START_PATTERN = re.compile(
+    r"^\[PartyClient\] (?:Requesting queue for|Entering queue for match group) .*Casual Match\b"
+    r"|^\[ReliableMsg\] PartyQueueForMatch started\b"
+)
+MATCH_FOUND_PATTERN = re.compile(
+    r"^\[PartyClient\] Leaving queue for match group .*Casual Match\b"
+    r"|^\[ReliableMsg\] AcceptLobbyInvite\b"
+    r"|^Lobby created\s*$"
+    r"|^Differing lobby received\.",
+    re.IGNORECASE,
+)
 MAP_PATTERN = re.compile(r"^Map:\s*([A-Za-z0-9_]+)\s*$")
-
-
-# -----------------------------
-# Settings helpers
-# -----------------------------
 
 
 def load_settings() -> dict:
@@ -81,40 +78,23 @@ def ensure_settings_file() -> None:
         save_settings(DEFAULT_SETTINGS)
 
 
-# -----------------------------
-# TF2 focus check
-# -----------------------------
-
-
 def is_tf2_focused() -> bool:
     try:
         hwnd = win32gui.GetForegroundWindow()
         if not hwnd:
             return False
         _, pid = win32process.GetWindowThreadProcessId(hwnd)
-        proc = psutil.Process(pid)
-        return proc.name().lower() == TF2_PROCESS_NAME
+        return psutil.Process(pid).name().lower() == TF2_PROCESS_NAME
     except Exception:
         return False
 
 
-# -----------------------------
-# Steam / TF2 path detection
-# -----------------------------
-
-
 def get_steam_path() -> Optional[Path]:
-    reg_candidates = [
-        (
-            winreg.HKEY_LOCAL_MACHINE,
-            r"SOFTWARE\WOW6432Node\Valve\Steam",
-            "InstallPath",
-        ),
+    for root, subkey, value in [
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath"),
         (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Valve\Steam", "InstallPath"),
         (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Valve\Steam", "SteamPath"),
-    ]
-
-    for root, subkey, value in reg_candidates:
+    ]:
         try:
             key = winreg.OpenKey(root, subkey)
             val, _ = winreg.QueryValueEx(key, value)
@@ -124,24 +104,11 @@ def get_steam_path() -> Optional[Path]:
                 return p
         except OSError:
             continue
-
-    common = [
-        Path(r"C:\Program Files (x86)\Steam"),
-        Path(r"C:\Program Files\Steam"),
-        Path(r"D:\Steam"),
-        Path(r"D:\SteamLibrary"),
-        Path(r"E:\Steam"),
-        Path(r"E:\SteamLibrary"),
-    ]
-    for p in common:
+    for p in [Path(r"C:\Program Files (x86)\Steam"), Path(r"C:\Program Files\Steam"),
+              Path(r"D:\Steam"), Path(r"D:\SteamLibrary"), Path(r"E:\Steam"), Path(r"E:\SteamLibrary")]:
         if p.exists() and (p / "steam.exe").exists():
             return p
-
     return None
-
-
-def parse_vdf_strings(text: str) -> list[str]:
-    return re.findall(r'"([^"]*)"', text)
 
 
 def get_library_folders(steam_path: Path) -> list[Path]:
@@ -149,10 +116,9 @@ def get_library_folders(steam_path: Path) -> list[Path]:
     vdf_path = steam_path / "steamapps" / "libraryfolders.vdf"
     if not vdf_path.exists():
         return libs
-
     try:
         text = vdf_path.read_text(encoding="utf-8", errors="ignore")
-        strings = parse_vdf_strings(text)
+        strings = re.findall(r'"([^"]*)"', text)
         for i, s in enumerate(strings):
             if s.lower() == "path" and i + 1 < len(strings):
                 p = Path(strings[i + 1])
@@ -160,7 +126,6 @@ def get_library_folders(steam_path: Path) -> list[Path]:
                     libs.append(p)
     except Exception:
         pass
-
     return libs
 
 
@@ -168,126 +133,126 @@ def find_tf2_tf_dir() -> Optional[Path]:
     steam_path = get_steam_path()
     if not steam_path:
         return None
-
     for lib in get_library_folders(steam_path):
         tf_dir = lib / "steamapps" / "common" / "Team Fortress 2" / "tf"
         if tf_dir.exists():
             return tf_dir
-
     return None
-
-
-def get_console_log_path() -> Optional[Path]:
-    tf_dir = find_tf2_tf_dir()
-    if not tf_dir:
-        return None
-    return tf_dir / "console.log"
 
 
 def clear_console_log(log_path: Path) -> None:
     try:
-        log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(log_path, "w", encoding="utf-8", errors="ignore"):
             pass
     except Exception:
         pass
 
 
-# -----------------------------
-# Log follower (non-blocking polling)
-# -----------------------------
-
-
 class ConsoleLogFollower:
     def __init__(self, path: Path):
         self.path = path
         self.f = None
+        self._last_size = 0
 
     def open(self) -> None:
-        self.f = open(self.path, "r", errors="ignore")
+        self.f = open(self.path, "r", encoding="utf-8", errors="ignore")
         self.f.seek(0, os.SEEK_END)
+        try:
+            self._last_size = self.path.stat().st_size
+        except OSError:
+            self._last_size = 0
+
+    def close(self) -> None:
+        if self.f:
+            try:
+                self.f.close()
+            except Exception:
+                pass
+            self.f = None
 
     def poll_lines(self, max_lines: int = 250) -> list[str]:
-        if self.f is None:
-            self.open()
-
-        lines: list[str] = []
-        for _ in range(max_lines):
-            pos = self.f.tell()
-            line = self.f.readline()
-            if not line:
-                self.f.seek(pos, os.SEEK_SET)
-                break
-            lines.append(line.rstrip("\n"))
-        return lines
+        try:
+            if self.f is None:
+                self.open()
+            # Handle file truncation (TF2 restart)
+            try:
+                current_size = self.path.stat().st_size
+                if current_size < self._last_size:
+                    self.close()
+                    self.open()
+                self._last_size = current_size
+            except OSError:
+                pass
+            lines = []
+            for _ in range(max_lines):
+                pos = self.f.tell()
+                line = self.f.readline()
+                if not line:
+                    self.f.seek(pos, os.SEEK_SET)
+                    break
+                lines.append(line.rstrip("\n"))
+            return lines
+        except (OSError, IOError):
+            self.close()
+            return []
 
 
 def format_mmss_mmm(seconds: float) -> str:
-    seconds = max(0.0, seconds)
-    
-    # Cap at 99:99:99.9 (99 hours, 99 minutes, 99 seconds, 900ms) to prevent overflow
-    MAX_TIME_SECONDS = 99 * 3600 + 99 * 60 + 99 + 0.9  # 99:99:99.9
-    seconds = min(seconds, MAX_TIME_SECONDS)
-    
+    seconds = max(0.0, min(seconds, 99 * 3600 + 99 * 60 + 99.9))
     total_ms = int(seconds * 1000.0)
     total_secs = total_ms // 1000
-    hours = total_secs // 3600
-    mins = (total_secs % 3600) // 60
-    secs = total_secs % 60
+    hours, mins, secs = total_secs // 3600, (total_secs % 3600) // 60, total_secs % 60
     ms = total_ms % 1000
-
     if hours > 0:
-        # HH:MM:SS.m format (single millisecond digit)
         return f"{hours:02d}:{mins:02d}:{secs:02d}.{ms // 100}"
-    else:
-        # MM:SS.mmm format
-        return f"{mins:02d}:{secs:02d}.{ms:03d}"
+    return f"{mins:02d}:{secs:02d}.{ms:03d}"
 
 
-# -----------------------------
-# Icon helper
-# -----------------------------
+_cached_app_icon: Optional[QtGui.QIcon] = None
 
 
 def get_app_icon() -> QtGui.QIcon:
+    global _cached_app_icon
+    if _cached_app_icon is not None:
+        return _cached_app_icon
     if ICON_PATH.exists():
-        return QtGui.QIcon(str(ICON_PATH))
-
-    pix = QtGui.QPixmap(64, 64)
-    pix.fill(QtCore.Qt.GlobalColor.transparent)
-    p = QtGui.QPainter(pix)
-    p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-    p.setBrush(QtGui.QColor(26, 26, 30, 255))
-    p.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255, 170), 2))
-    p.drawRoundedRect(8, 8, 48, 48, 12, 12)
-    p.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255, 220), 3))
-    p.drawLine(22, 34, 32, 44)
-    p.drawLine(32, 44, 46, 24)
-    p.end()
-    return QtGui.QIcon(pix)
-
-
-# -----------------------------
-# UI: polished overlay card
-# -----------------------------
+        _cached_app_icon = QtGui.QIcon(str(ICON_PATH))
+    else:
+        pix = QtGui.QPixmap(64, 64)
+        pix.fill(QtCore.Qt.GlobalColor.transparent)
+        p = QtGui.QPainter(pix)
+        p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        p.setBrush(QtGui.QColor(26, 26, 30, 255))
+        p.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255, 170), 2))
+        p.drawRoundedRect(8, 8, 48, 48, 12, 12)
+        p.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255, 220), 3))
+        p.drawLine(22, 34, 32, 44)
+        p.drawLine(32, 44, 46, 24)
+        p.end()
+        _cached_app_icon = QtGui.QIcon(pix)
+    return _cached_app_icon
 
 
 class OverlayWindow(QtWidgets.QWidget):
+    _STATUS_STYLES = {
+        "IDLE": "QLabel#StatusPill { padding: 4px 10px; border-radius: 999px; color: rgba(255,255,255,230); background-color: rgba(120,120,120,95); border: 1px solid rgba(255,255,255,45); min-width: 110px; }",
+        "QUEUEING": "QLabel#StatusPill { padding: 4px 10px; border-radius: 999px; color: rgba(255,255,255,230); background-color: rgba(255,193,7,100); border: 1px solid rgba(255,255,255,45); min-width: 110px; }",
+        "MATCH FOUND": "QLabel#StatusPill { padding: 4px 10px; border-radius: 999px; color: rgba(255,255,255,230); background-color: rgba(76,175,80,100); border: 1px solid rgba(255,255,255,45); min-width: 110px; }",
+    }
+
     def __init__(self, log_path: Path):
         super().__init__()
         self.settings = load_settings()
-
-        self.status: str = "IDLE"  # IDLE, QUEUEING, MATCH FOUND
+        self.status = "IDLE"
+        self._last_status = ""
         self.queue_start_perf: Optional[float] = None
-        self.last_match_found_seconds: float = 0.0
+        self.last_match_found_seconds = 0.0
         self.map_name: Optional[str] = None
-
         self.follower = ConsoleLogFollower(log_path)
 
         self.setObjectName("Root")
         self.setWindowTitle("TF2 Queue Timer")
         self.setWindowIcon(get_app_icon())
-
         self.setWindowFlags(
             QtCore.Qt.WindowType.FramelessWindowHint
             | QtCore.Qt.WindowType.Tool
@@ -295,7 +260,6 @@ class OverlayWindow(QtWidgets.QWidget):
         )
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
-
         self.setWindowOpacity(float(self.settings["opacity"]))
         self.move(*self.settings["pos"])
 
@@ -303,17 +267,16 @@ class OverlayWindow(QtWidgets.QWidget):
         self._build_ui()
 
         self.poll_timer = QtCore.QTimer(self)
-        self.poll_timer.timeout.connect(self.on_poll_tick)
-        self.poll_timer.start(50)
+        self.poll_timer.timeout.connect(self._on_poll_tick)
+        self.poll_timer.start(100)
 
         self.ui_timer = QtCore.QTimer(self)
         self.ui_timer.timeout.connect(self._update_ui)
-        self.ui_timer.start(16)
 
         self.proc_timer = QtCore.QTimer(self)
-        self.proc_timer.timeout.connect(self._sync_visibility_with_tf2)
-        self.proc_timer.start(200)
-        self._sync_visibility_with_tf2()
+        self.proc_timer.timeout.connect(self._sync_visibility)
+        self.proc_timer.start(500)
+        self._sync_visibility()
 
     def _load_font(self):
         self.font_family = None
@@ -333,7 +296,6 @@ class OverlayWindow(QtWidgets.QWidget):
     def _build_ui(self):
         self.card = QtWidgets.QFrame(self)
         self.card.setObjectName("Card")
-
         shadow = QtWidgets.QGraphicsDropShadowEffect(self.card)
         shadow.setBlurRadius(24)
         shadow.setOffset(0, 10)
@@ -348,26 +310,21 @@ class OverlayWindow(QtWidgets.QWidget):
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(10)
 
-        header_row = QtWidgets.QHBoxLayout()
-        header_row.setSpacing(10)
-
+        header = QtWidgets.QHBoxLayout()
+        header.setSpacing(10)
         self.title_label = QtWidgets.QLabel("Queue Timer")
         self.title_label.setFont(self._font(11, True))
         self.title_label.setObjectName("Title")
-
         self.status_pill = QtWidgets.QLabel("IDLE")
         self.status_pill.setFont(self._font(10, True))
         self.status_pill.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.status_pill.setObjectName("StatusPill")
-
-        header_row.addWidget(self.title_label, 1)
-        header_row.addWidget(self.status_pill, 0)
-        layout.addLayout(header_row)
+        header.addWidget(self.title_label, 1)
+        header.addWidget(self.status_pill, 0)
+        layout.addLayout(header)
 
         self.timer_label = QtWidgets.QLabel("--:--.---")
-        self.timer_label.setFont(
-            self._font(int(self.settings["font_size"]) + 10, True)
-        )
+        self.timer_label.setFont(self._font(int(self.settings["font_size"]) + 10, True))
         self.timer_label.setObjectName("Timer")
         self.timer_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(self.timer_label)
@@ -377,46 +334,24 @@ class OverlayWindow(QtWidgets.QWidget):
         self.map_label.setObjectName("Meta")
         layout.addWidget(self.map_label)
 
-        self.setStyleSheet(
-            """
-            QFrame#Card {
-              background-color: rgba(18, 18, 20, 165);
-              border: 1px solid rgba(255, 255, 255, 40);
-              border-radius: 14px;
-            }
-            QLabel#Title {
-              color: rgba(255, 255, 255, 220);
-              letter-spacing: 0.3px;
-            }
-            QLabel#Timer {
-              color: rgba(255, 255, 255, 240);
-            }
-            QLabel#Meta {
-              color: rgba(255, 255, 255, 175);
-            }
-            QLabel#StatusPill {
-              padding: 4px 10px;
-              border-radius: 999px;
-              color: rgba(255, 255, 255, 230);
-              background-color: rgba(120, 120, 120, 95);
-              border: 1px solid rgba(255, 255, 255, 45);
-              min-width: 110px;
-            }
-            """
-        )
-
+        self.setStyleSheet("""
+            QFrame#Card { background-color: rgba(18,18,20,165); border: 1px solid rgba(255,255,255,40); border-radius: 14px; }
+            QLabel#Title { color: rgba(255,255,255,220); }
+            QLabel#Timer { color: rgba(255,255,255,240); }
+            QLabel#Meta { color: rgba(255,255,255,175); }
+            QLabel#StatusPill { padding: 4px 10px; border-radius: 999px; color: rgba(255,255,255,230); background-color: rgba(120,120,120,95); border: 1px solid rgba(255,255,255,45); min-width: 110px; }
+        """)
         self._update_ui()
 
-    def _sync_visibility_with_tf2(self):
+    def _sync_visibility(self):
         if is_tf2_focused():
             if not self.isVisible():
                 self.show()
             self.raise_()
-        else:
-            if self.isVisible():
-                self.hide()
+        elif self.isVisible():
+            self.hide()
 
-    def on_poll_tick(self):
+    def _on_poll_tick(self):
         for line in self.follower.poll_lines():
             self._handle_line(line)
 
@@ -425,165 +360,122 @@ class OverlayWindow(QtWidgets.QWidget):
         if m:
             self.map_name = m.group(1)
             return
-
-        if any(p.search(line) for p in QUEUE_START_PATTERNS):
+        if QUEUE_START_PATTERN.match(line):
             self.status = "QUEUEING"
             self.queue_start_perf = time.perf_counter()
             self.last_match_found_seconds = 0.0
             self.map_name = None
+            self._update_timers()
             return
+        if self.status == "QUEUEING" and self.queue_start_perf and MATCH_FOUND_PATTERN.match(line):
+            self.status = "MATCH FOUND"
+            self.last_match_found_seconds = time.perf_counter() - self.queue_start_perf
+            self.queue_start_perf = None
+            self._update_timers()
 
-        if self.status == "QUEUEING" and self.queue_start_perf is not None:
-            if any(p.search(line) for p in MATCH_FOUND_PATTERNS):
-                self.status = "MATCH FOUND"
-                self.last_match_found_seconds = (
-                    time.perf_counter() - self.queue_start_perf
-                )
-                self.queue_start_perf = None
-                return
+    def _update_timers(self):
+        if self.status == "QUEUEING":
+            self.poll_timer.setInterval(50)
+            if not self.ui_timer.isActive():
+                self.ui_timer.start(16)
+        else:
+            self.poll_timer.setInterval(100)
+            if self.ui_timer.isActive():
+                self.ui_timer.stop()
+                self._update_ui()
 
     def _elapsed_seconds(self) -> float:
-        if self.status == "QUEUEING" and self.queue_start_perf is not None:
+        if self.status == "QUEUEING" and self.queue_start_perf:
             return time.perf_counter() - self.queue_start_perf
         if self.status == "MATCH FOUND":
             return self.last_match_found_seconds
         return 0.0
 
-    def _status_style(self) -> tuple[str, str]:
-        if self.status == "QUEUEING":
-            return ("QUEUEING", "rgba(255, 193, 7, 100)")
-        if self.status == "MATCH FOUND":
-            return ("MATCH FOUND", "rgba(76, 175, 80, 100)")
-        return ("IDLE", "rgba(120, 120, 120, 95)")
-
     def _update_ui(self):
-        elapsed = self._elapsed_seconds()
-        self.timer_label.setText(
-            "--:--.---" if self.status == "IDLE" else format_mmss_mmm(elapsed)
-        )
-
-        pill_text, pill_bg = self._status_style()
-        self.status_pill.setText(pill_text)
-        self.status_pill.setStyleSheet(
-            f"""
-            QLabel#StatusPill {{
-              padding: 4px 10px;
-              border-radius: 999px;
-              color: rgba(255, 255, 255, 230);
-              background-color: {pill_bg};
-              border: 1px solid rgba(255, 255, 255, 45);
-              min-width: 110px;
-            }}
-            """
-        )
-
+        self.timer_label.setText("--:--.---" if self.status == "IDLE" else format_mmss_mmm(self._elapsed_seconds()))
+        if self.status != self._last_status:
+            self.status_pill.setText(self.status)
+            self.status_pill.setStyleSheet(self._STATUS_STYLES[self.status])
+            self._last_status = self.status
         self.map_label.setText(f"Map: {self.map_name}" if self.map_name else "Map: —")
         self.adjustSize()
 
+    def reset_timer(self):
+        self.status = "IDLE"
+        self.queue_start_perf = None
+        self.last_match_found_seconds = 0.0
+        self.map_name = None
+        self._update_timers()
+        self._update_ui()
 
-# -----------------------------
-# Tray icon
-# -----------------------------
 
-
-def build_tray(
-    app: QtWidgets.QApplication,
-    window: QtWidgets.QWidget,
-) -> QtWidgets.QSystemTrayIcon:
+def build_tray(app: QtWidgets.QApplication, window: OverlayWindow) -> QtWidgets.QSystemTrayIcon:
     tray = QtWidgets.QSystemTrayIcon(app)
     tray.setIcon(get_app_icon())
     tray.setToolTip("TF2 Queue Timer Overlay")
-
     menu = QtWidgets.QMenu()
-    act_quit = menu.addAction("Quit")
-
-    act_quit.triggered.connect(app.quit)
-
+    menu.addAction("Reset Timer").triggered.connect(window.reset_timer)
+    menu.addSeparator()
+    menu.addAction("Quit").triggered.connect(app.quit)
     tray.setContextMenu(menu)
     tray.show()
     return tray
 
 
-# -----------------------------
-# Startup popup
-# -----------------------------
+def acquire_lock() -> bool:
+    try:
+        if LOCK_PATH.exists():
+            try:
+                old_pid = int(LOCK_PATH.read_text().strip())
+                if psutil.pid_exists(old_pid):
+                    try:
+                        proc = psutil.Process(old_pid)
+                        if "python" in proc.name().lower() or "tf2queuetimer" in proc.name().lower():
+                            return False
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+            except (ValueError, OSError):
+                pass
+        LOCK_PATH.write_text(str(os.getpid()))
+        return True
+    except Exception:
+        return True
 
 
-def show_startup_message(tray: QtWidgets.QSystemTrayIcon) -> None:
-    title = "TF2 Queue Timer started"
-    body = (
-        "Running in the system tray.\n"
-        "Right-click the tray icon to quit."
-    )
-
-    if tray.supportsMessages():
-        tray.showMessage(
-            title,
-            body,
-            QtWidgets.QSystemTrayIcon.MessageIcon.Information,
-            6000,
-        )
-    else:
-        QtWidgets.QMessageBox.information(None, title, body)
-
-
-# -----------------------------
-# Missing console.log prompt
-# -----------------------------
-
-
-def show_missing_console_log_message(tf_dir: Optional[Path]) -> None:
-    tf_dir_text = str(tf_dir) if tf_dir else "(TF2 tf folder not found)"
-    text = (
-        "TF2 console.log was not found.\n\n"
-        "This program reads TF2's console.log, which is only created when TF2 is "
-        "launched with the launch option:\n\n"
-        "  -condebug\n\n"
-        "How to set it:\n"
-        "Steam -> Library -> Team Fortress 2 -> Properties -> General -> Launch Options\n"
-        "Add:  -condebug\n\n"
-        f"Expected location:\n{tf_dir_text}\\console.log"
-    )
-    QtWidgets.QMessageBox.warning(None, "TF2 Queue Timer", text)
-
-
-# -----------------------------
-# Main
-# -----------------------------
+def release_lock() -> None:
+    try:
+        if LOCK_PATH.exists() and int(LOCK_PATH.read_text().strip()) == os.getpid():
+            LOCK_PATH.unlink()
+    except Exception:
+        pass
 
 
 def main():
+    if not acquire_lock():
+        app = QtWidgets.QApplication([])
+        app.setWindowIcon(get_app_icon())
+        QtWidgets.QMessageBox.warning(None, "TF2 Queue Timer", "Another instance is already running.\nCheck your system tray.")
+        sys.exit(0)
+
+    atexit.register(release_lock)
     ensure_settings_file()
 
     tf_dir = find_tf2_tf_dir()
     if not tf_dir:
         app = QtWidgets.QApplication([])
         app.setWindowIcon(get_app_icon())
-        QtWidgets.QMessageBox.critical(
-            None,
-            "TF2 Queue Timer",
-            "Could not find TF2 installation.\n"
-            "Make sure TF2 is installed via Steam.",
-        )
+        QtWidgets.QMessageBox.critical(None, "TF2 Queue Timer", "Could not find TF2 installation.\nMake sure TF2 is installed via Steam.")
         sys.exit(1)
 
     log_path = tf_dir / "console.log"
-
-    # If console.log doesn't exist, tell the user to add -condebug.
-    # (We do NOT auto-create it here, because without -condebug TF2 may never write it.)
     if not log_path.exists():
         app = QtWidgets.QApplication([])
         app.setWindowIcon(get_app_icon())
-        show_missing_console_log_message(tf_dir)
+        QtWidgets.QMessageBox.warning(None, "TF2 Queue Timer",
+            f"TF2 console.log was not found.\n\nAdd -condebug to TF2 launch options:\nSteam → Library → TF2 → Properties → Launch Options\n\nExpected: {tf_dir}\\console.log")
         sys.exit(1)
 
-    # Clear log at program start (as requested earlier)
     clear_console_log(log_path)
-
-    try:
-        log_path.touch(exist_ok=True)
-    except Exception:
-        pass
 
     app = QtWidgets.QApplication([])
     app.setWindowIcon(get_app_icon())
@@ -593,7 +485,7 @@ def main():
     window.hide()
 
     tray = build_tray(app, window)
-    QtCore.QTimer.singleShot(400, lambda: show_startup_message(tray))
+    QtCore.QTimer.singleShot(400, lambda: tray.showMessage("TF2 Queue Timer started", "Running in the system tray.\nRight-click the tray icon to quit.", QtWidgets.QSystemTrayIcon.MessageIcon.Information, 6000) if tray.supportsMessages() else None)
 
     sys.exit(app.exec())
 

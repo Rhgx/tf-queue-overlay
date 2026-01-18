@@ -4,3 +4,5 @@ dist/
 *.spec
 .vscode/
 *.egg-info/
+.lock
+settings.json
