@@ -447,6 +447,7 @@ class OverlayWindow(QtWidgets.QWidget):
         m = MAP_PATTERN.search(line)
         if m:
             self.map_name = m.group(1)
+            self._update_ui()
             return
         if QUEUE_START_PATTERN.search(line):
             self.status = "QUEUEING"
