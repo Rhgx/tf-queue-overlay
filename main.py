@@ -495,13 +495,8 @@ def build_tray(
     tray.setToolTip("TF2 Queue Timer Overlay")
 
     menu = QtWidgets.QMenu()
-    act_show = menu.addAction("Show Overlay")
-    act_hide = menu.addAction("Hide Overlay")
-    menu.addSeparator()
     act_quit = menu.addAction("Quit")
 
-    act_show.triggered.connect(window.show)
-    act_hide.triggered.connect(window.hide)
     act_quit.triggered.connect(app.quit)
 
     tray.setContextMenu(menu)
