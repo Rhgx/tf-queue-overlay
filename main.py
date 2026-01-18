@@ -224,6 +224,11 @@ class ConsoleLogFollower:
 
 def format_mmss_mmm(seconds: float) -> str:
     seconds = max(0.0, seconds)
+    
+    # Cap at 99:99:99.9 (99 hours, 99 minutes, 99 seconds, 900ms) to prevent overflow
+    MAX_TIME_SECONDS = 99 * 3600 + 99 * 60 + 99 + 0.9  # 99:99:99.9
+    seconds = min(seconds, MAX_TIME_SECONDS)
+    
     total_ms = int(seconds * 1000.0)
     total_secs = total_ms // 1000
     hours = total_secs // 3600
