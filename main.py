@@ -17,7 +17,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 
 def get_app_dir() -> Path:
-    """Directory for external files (settings.json). Next to the original exe."""
+    """Directory for all app files. Always next to the executable."""
     if hasattr(sys, "frozen"):  # PyInstaller
         return Path(sys.executable).resolve().parent
     exe_path = Path(sys.argv[0]).resolve()
@@ -26,18 +26,10 @@ def get_app_dir() -> Path:
     return Path(__file__).resolve().parent  # Development
 
 
-def get_data_dir() -> Path:
-    """Directory for bundled assets (font.ttf, icon.ico)."""
-    if hasattr(sys, "_MEIPASS"):  # PyInstaller
-        return Path(sys._MEIPASS)
-    return Path(__file__).resolve().parent  # Nuitka or development
-
-
 APP_DIR = get_app_dir()
-DATA_DIR = get_data_dir()
 SETTINGS_PATH = APP_DIR / "settings.json"
-FONT_PATH = DATA_DIR / "font.ttf"
-ICON_PATH = DATA_DIR / "icon.ico"
+FONT_PATH = APP_DIR / "font.ttf"
+ICON_PATH = APP_DIR / "icon.ico"
 LOCK_PATH = APP_DIR / ".lock"
 
 DEFAULT_SETTINGS = {"pos": [24, 24], "opacity": 0.5, "font_size": 22}
@@ -174,7 +166,6 @@ class ConsoleLogFollower:
         try:
             if self.f is None:
                 self.open()
-            # Handle file truncation (TF2 restart)
             try:
                 current_size = self.path.stat().st_size
                 if current_size < self._last_size:
@@ -231,6 +222,98 @@ def get_app_icon() -> QtGui.QIcon:
         p.end()
         _cached_app_icon = QtGui.QIcon(pix)
     return _cached_app_icon
+
+
+class SettingsDialog(QtWidgets.QDialog):
+    def __init__(self, overlay: "OverlayWindow", parent=None):
+        super().__init__(parent)
+        self.overlay = overlay
+        self.settings = overlay.settings.copy()
+        
+        self.setWindowTitle("Settings")
+        self.setWindowIcon(get_app_icon())
+        self.setFixedWidth(300)
+        
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setSpacing(12)
+        
+        # Opacity
+        opacity_group = QtWidgets.QGroupBox("Opacity")
+        opacity_layout = QtWidgets.QHBoxLayout(opacity_group)
+        self.opacity_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.opacity_slider.setRange(10, 100)
+        self.opacity_slider.setValue(int(self.settings["opacity"] * 100))
+        self.opacity_label = QtWidgets.QLabel(f"{int(self.settings['opacity'] * 100)}%")
+        self.opacity_label.setFixedWidth(40)
+        self.opacity_slider.valueChanged.connect(self._on_opacity_change)
+        opacity_layout.addWidget(self.opacity_slider)
+        opacity_layout.addWidget(self.opacity_label)
+        layout.addWidget(opacity_group)
+        
+        # Font Size
+        font_group = QtWidgets.QGroupBox("Font Size")
+        font_layout = QtWidgets.QHBoxLayout(font_group)
+        self.font_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.font_slider.setRange(14, 40)
+        self.font_slider.setValue(int(self.settings["font_size"]))
+        self.font_label = QtWidgets.QLabel(f"{int(self.settings['font_size'])}pt")
+        self.font_label.setFixedWidth(40)
+        self.font_slider.valueChanged.connect(self._on_font_change)
+        font_layout.addWidget(self.font_slider)
+        font_layout.addWidget(self.font_label)
+        layout.addWidget(font_group)
+        
+        # Position
+        pos_group = QtWidgets.QGroupBox("Position (X, Y)")
+        pos_layout = QtWidgets.QHBoxLayout(pos_group)
+        self.pos_x = QtWidgets.QSpinBox()
+        self.pos_x.setRange(0, 3840)
+        self.pos_x.setValue(self.settings["pos"][0])
+        self.pos_y = QtWidgets.QSpinBox()
+        self.pos_y.setRange(0, 2160)
+        self.pos_y.setValue(self.settings["pos"][1])
+        pos_layout.addWidget(QtWidgets.QLabel("X:"))
+        pos_layout.addWidget(self.pos_x)
+        pos_layout.addWidget(QtWidgets.QLabel("Y:"))
+        pos_layout.addWidget(self.pos_y)
+        layout.addWidget(pos_group)
+        
+        # Buttons
+        btn_layout = QtWidgets.QHBoxLayout()
+        self.save_btn = QtWidgets.QPushButton("Save")
+        self.cancel_btn = QtWidgets.QPushButton("Cancel")
+        self.save_btn.clicked.connect(self._save)
+        self.cancel_btn.clicked.connect(self.reject)
+        btn_layout.addStretch()
+        btn_layout.addWidget(self.save_btn)
+        btn_layout.addWidget(self.cancel_btn)
+        layout.addLayout(btn_layout)
+    
+    def _on_opacity_change(self, value: int):
+        self.opacity_label.setText(f"{value}%")
+        self.overlay.setWindowOpacity(value / 100.0)
+    
+    def _on_font_change(self, value: int):
+        self.font_label.setText(f"{value}pt")
+    
+    def _save(self):
+        self.settings["opacity"] = self.opacity_slider.value() / 100.0
+        self.settings["font_size"] = self.font_slider.value()
+        self.settings["pos"] = [self.pos_x.value(), self.pos_y.value()]
+        
+        self.overlay.settings = self.settings
+        self.overlay.setWindowOpacity(self.settings["opacity"])
+        self.overlay.move(*self.settings["pos"])
+        self.overlay.timer_label.setFont(self.overlay._font(self.settings["font_size"] + 10, True))
+        self.overlay.adjustSize()
+        
+        save_settings(self.settings)
+        self.accept()
+    
+    def reject(self):
+        # Restore original opacity on cancel
+        self.overlay.setWindowOpacity(self.overlay.settings["opacity"])
+        super().reject()
 
 
 class OverlayWindow(QtWidgets.QWidget):
@@ -407,6 +490,10 @@ class OverlayWindow(QtWidgets.QWidget):
         self.map_name = None
         self._update_timers()
         self._update_ui()
+    
+    def show_settings(self):
+        dialog = SettingsDialog(self)
+        dialog.exec()
 
 
 def build_tray(app: QtWidgets.QApplication, window: OverlayWindow) -> QtWidgets.QSystemTrayIcon:
@@ -414,6 +501,7 @@ def build_tray(app: QtWidgets.QApplication, window: OverlayWindow) -> QtWidgets.
     tray.setIcon(get_app_icon())
     tray.setToolTip("TF2 Queue Timer Overlay")
     menu = QtWidgets.QMenu()
+    menu.addAction("Settings...").triggered.connect(window.show_settings)
     menu.addAction("Reset Timer").triggered.connect(window.reset_timer)
     menu.addSeparator()
     menu.addAction("Quit").triggered.connect(app.quit)
@@ -485,7 +573,7 @@ def main():
     window.hide()
 
     tray = build_tray(app, window)
-    QtCore.QTimer.singleShot(400, lambda: tray.showMessage("TF2 Queue Timer started", "Running in the system tray.\nRight-click the tray icon to quit.", QtWidgets.QSystemTrayIcon.MessageIcon.Information, 6000) if tray.supportsMessages() else None)
+    QtCore.QTimer.singleShot(400, lambda: tray.showMessage("TF2 Queue Timer started", "Running in the system tray.\nRight-click the tray icon for options.", QtWidgets.QSystemTrayIcon.MessageIcon.Information, 6000) if tray.supportsMessages() else None)
 
     sys.exit(app.exec())
 
