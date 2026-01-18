@@ -51,7 +51,7 @@ MATCH_FOUND_PATTERN = re.compile(
     r"|^Differing lobby received\.",
     re.IGNORECASE,
 )
-MAP_PATTERN = re.compile(r"^Map:\s*([A-Za-z0-9_]+)\s*$")
+MAP_PATTERN = re.compile(r"^Map:\s*([A-Za-z0-9_]+)")
 
 
 def load_settings() -> dict:
@@ -444,18 +444,18 @@ class OverlayWindow(QtWidgets.QWidget):
             self._handle_line(line)
 
     def _handle_line(self, line: str):
-        m = MAP_PATTERN.match(line)
+        m = MAP_PATTERN.search(line)
         if m:
             self.map_name = m.group(1)
             return
-        if QUEUE_START_PATTERN.match(line):
+        if QUEUE_START_PATTERN.search(line):
             self.status = "QUEUEING"
             self.queue_start_perf = time.perf_counter()
             self.last_match_found_seconds = 0.0
             self.map_name = None
             self._update_timers()
             return
-        if self.status == "QUEUEING" and self.queue_start_perf and MATCH_FOUND_PATTERN.match(line):
+        if self.status == "QUEUEING" and self.queue_start_perf and MATCH_FOUND_PATTERN.search(line):
             self.status = "MATCH FOUND"
             self.last_match_found_seconds = time.perf_counter() - self.queue_start_perf
             self.queue_start_perf = None
