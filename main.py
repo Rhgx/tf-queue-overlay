@@ -17,19 +17,24 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 
 def get_app_dir() -> Path:
-    """Directory for all app files. Always next to the executable."""
+    """Directory for external files (settings.json). Next to the executable."""
     if hasattr(sys, "frozen"):  # PyInstaller
         return Path(sys.executable).resolve().parent
-    exe_path = Path(sys.argv[0]).resolve()
-    if exe_path.suffix.lower() == ".exe":  # Nuitka
-        return exe_path.parent
+    return Path(__file__).resolve().parent  # Development
+
+
+def get_data_dir() -> Path:
+    """Directory for bundled assets (font.ttf, icon.ico)."""
+    if hasattr(sys, "_MEIPASS"):  # PyInstaller bundles to _MEIPASS
+        return Path(sys._MEIPASS)
     return Path(__file__).resolve().parent  # Development
 
 
 APP_DIR = get_app_dir()
+DATA_DIR = get_data_dir()
 SETTINGS_PATH = APP_DIR / "settings.json"
-FONT_PATH = APP_DIR / "font.ttf"
-ICON_PATH = APP_DIR / "icon.ico"
+FONT_PATH = DATA_DIR / "font.ttf"
+ICON_PATH = DATA_DIR / "icon.ico"
 LOCK_PATH = APP_DIR / ".lock"
 
 DEFAULT_SETTINGS = {"pos": [24, 24], "opacity": 0.5, "font_size": 22}
