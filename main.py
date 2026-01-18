@@ -513,7 +513,7 @@ def show_startup_message(tray: QtWidgets.QSystemTrayIcon) -> None:
     title = "TF2 Queue Timer started"
     body = (
         "Running in the system tray.\n"
-        "Right-click the tray icon to quit or show/hide the overlay."
+        "Right-click the tray icon to quit."
     )
 
     if tray.supportsMessages():
