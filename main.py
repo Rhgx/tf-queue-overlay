@@ -43,6 +43,8 @@ DEFAULT_SETTINGS = {"pos": [24, 24], "opacity": 0.5, "font_size": 22, "save_csv"
 CSV_PATH = APP_DIR / "queue_log.csv"
 TF2_PROCESS_NAME = "tf_win64.exe"
 
+WAIT_PERIOD = 20000
+
 QUEUE_START_PATTERN = re.compile(
     r"^\[PartyClient\] (?:Requesting queue for|Entering queue for match group) .*Casual Match\b"
     r"|^\[ReliableMsg\] PartyQueueForMatch started\b"
@@ -493,7 +495,7 @@ class OverlayWindow(QtWidgets.QWidget):
             self._update_timers()
             if self.settings.get("save_csv", False):
                 self._pending_csv_duration = self.last_match_found_seconds
-                QtCore.QTimer.singleShot(15000, self._save_pending_csv)
+                QtCore.QTimer.singleShot(WAIT_PERIOD, self._save_pending_csv)
 
     def _save_pending_csv(self):
         """Save CSV after delay to allow map name detection."""

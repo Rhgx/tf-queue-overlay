@@ -4,7 +4,7 @@ A simple overlay utility for Team Fortress 2 that tracks how long you have been 
 
 > [!NOTE]
 > Windows may flag this program as suspicious because it is not digitally signed. You can verify that the file is safe by checking it on VirusTotal:
-> [VirusTotal Scan Result](https://www.virustotal.com/gui/file-analysis/MTlmOTZlZTRkODI2YWQwOWZmM2E2NTUyYzVjZWU5OWU6MTc2ODc0NjkyNQ==)
+> [VirusTotal Scan Result](https://www.virustotal.com/gui/file-analysis/MDgzNDBmNGE3Nzc0OGU4ZjBjNzc5NmM0Y2E2MWMxYmI6MTc2ODc3MDk5NQ==)
 
 ## How it Works
 
