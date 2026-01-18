@@ -27,8 +27,13 @@ The overlay automatically shows itself when the TF2 window is focused and hides 
 
 ## Configuration
 
-On the first run, a `settings.json` file is created next to the executable. You can edit this file to adjust:
+You can easily adjust the overlay settings directly from the program:
 
-- **pos**: The [x, y] coordinates of the overlay on your screen.
-- **opacity**: The transparency level of the overlay (0.0 to 1.0).
-- **font_size**: The size of the text display.
+1.  Right-click the **TF2 Queue Timer** icon in your system tray.
+2.  Select **Settings...** to open the configuration dialog.
+3.  Adjust the following options:
+    - **Opacity**: The transparency level of the overlay.
+    - **Font Size**: The size of the timer and map text.
+    - **Position**: The [X, Y] coordinates of the overlay on your screen.
+
+Changes are saved automatically to `settings.json` in the application folder on every save.
