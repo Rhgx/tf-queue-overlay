@@ -43,7 +43,7 @@ DEFAULT_SETTINGS = {"pos": [24, 24], "opacity": 0.5, "font_size": 22, "save_csv"
 CSV_PATH = APP_DIR / "queue_log.csv"
 TF2_PROCESS_NAME = "tf_win64.exe"
 
-WAIT_PERIOD = 20000
+WAIT_PERIOD = 20 * 1000
 
 QUEUE_START_PATTERN = re.compile(
     r"^\[PartyClient\] (?:Requesting queue for|Entering queue for match group) .*Casual Match\b"
