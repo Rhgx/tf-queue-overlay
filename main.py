@@ -56,8 +56,8 @@ MATCH_FOUND_PATTERN = re.compile(
     r"|^Differing lobby received\.",
     re.IGNORECASE,
 )
-MAP_PATTERN = re.compile(r"^Map:\s*([A-Za-z0-9_]+)")
 
+MAP_PATTERN = re.compile(r"^Map:\s*([A-Za-z0-9_]+)")
 
 def load_settings() -> dict:
     if SETTINGS_PATH.exists():
