@@ -35,6 +35,7 @@ You can easily adjust the overlay settings directly from the program:
     - **Opacity**: The transparency level of the overlay.
     - **Font Size**: The size of the timer and map text.
     - **Position**: The [X, Y] coordinates of the overlay on your screen.
-    - **Save queue data to CSV**: When enabled, logs each queue session to `queue_log.csv`.
+    - **Wait Period**: Delay in seconds before saving to CSV (allows time for map detection).
+    - **Save queue data to CSV**: When enabled, logs each queue session to `queue_log.csv`. Note: Data is only saved if a map is detected.
 
 Changes are saved automatically to `settings.json` in the application folder on every save.

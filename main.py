@@ -39,11 +39,9 @@ FONT_PATH = DATA_DIR / "font.ttf"
 ICON_PATH = DATA_DIR / "icon.ico"
 LOCK_PATH = APP_DIR / ".lock"
 
-DEFAULT_SETTINGS = {"pos": [24, 24], "opacity": 0.5, "font_size": 22, "save_csv": False}
+DEFAULT_SETTINGS = {"pos": [24, 24], "opacity": 0.5, "font_size": 22, "save_csv": False, "wait_period": 20.0}
 CSV_PATH = APP_DIR / "queue_log.csv"
 TF2_PROCESS_NAME = "tf_win64.exe"
-
-WAIT_PERIOD = 20 * 1000
 
 QUEUE_START_PATTERN = re.compile(
     r"^\[PartyClient\] (?:Requesting queue for|Entering queue for match group) .*Casual Match\b"
@@ -311,6 +309,16 @@ class SettingsDialog(QtWidgets.QDialog):
         self.csv_checkbox.setChecked(self.settings.get("save_csv", False))
         self.csv_checkbox.setToolTip("When enabled, saves queue time and map to queue_log.csv")
         layout.addWidget(self.csv_checkbox)
+
+        # Wait Period
+        wait_group = QtWidgets.QGroupBox("Wait Period (Seconds)")
+        wait_layout = QtWidgets.QHBoxLayout(wait_group)
+        self.wait_spin = QtWidgets.QSpinBox()
+        self.wait_spin.setRange(0, 120)
+        self.wait_spin.setValue(int(self.settings.get("wait_period", 20.0)))
+        self.wait_spin.setToolTip("Delay before saving to CSV to allow map detection.")
+        wait_layout.addWidget(self.wait_spin)
+        layout.addWidget(wait_group)
         
         # Buttons
         btn_layout = QtWidgets.QHBoxLayout()
@@ -335,6 +343,7 @@ class SettingsDialog(QtWidgets.QDialog):
         self.settings["font_size"] = self.font_slider.value()
         self.settings["pos"] = [self.pos_x.value(), self.pos_y.value()]
         self.settings["save_csv"] = self.csv_checkbox.isChecked()
+        self.settings["wait_period"] = float(self.wait_spin.value())
         
         self.overlay.settings = self.settings
         self.overlay.setWindowOpacity(self.settings["opacity"])
@@ -495,12 +504,15 @@ class OverlayWindow(QtWidgets.QWidget):
             self._update_timers()
             if self.settings.get("save_csv", False):
                 self._pending_csv_duration = self.last_match_found_seconds
-                QtCore.QTimer.singleShot(WAIT_PERIOD, self._save_pending_csv)
+                wait_ms = int(self.settings.get("wait_period", 20.0) * 1000)
+                QtCore.QTimer.singleShot(wait_ms, self._save_pending_csv)
 
     def _save_pending_csv(self):
         """Save CSV after delay to allow map name detection."""
         if self._pending_csv_duration is not None:
-            save_queue_to_csv(self._pending_csv_duration, self.map_name)
+            # Only save if we have a valid map name
+            if self.map_name:
+                save_queue_to_csv(self._pending_csv_duration, self.map_name)
             self._pending_csv_duration = None
 
     def _update_timers(self):
