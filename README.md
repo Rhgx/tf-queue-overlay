@@ -16,6 +16,12 @@ The program monitors the Team Fortress 2 console log file to detect specific eve
 
 The overlay automatically shows itself when the TF2 window is focused and hides when you tab out.
 
+## Showcase
+
+<div align="center">
+  <video src="src/showcase.mp4" width="75%" controls autoplay muted loop></video>
+</div>
+
 ## Usage
 
 1.  Ensure Team Fortress 2 is installed via Steam.
@@ -36,6 +42,6 @@ You can easily adjust the overlay settings directly from the program:
     - **Font Size**: The size of the timer and map text.
     - **Position**: The [X, Y] coordinates of the overlay on your screen.
     - **Wait Period**: Delay in seconds before saving to CSV (allows time for map detection).
-    - **Save queue data to CSV**: When enabled, logs each queue session to `queue_log.csv`. Note: Data is only saved if a map is detected.
+    - **Save queue data to CSV**: When enabled, logs each queue session to `queue_log.csv`. (Note: Data is only saved if a map is detected.)
 
 Changes are saved automatically to `settings.json` in the application folder on every save.
