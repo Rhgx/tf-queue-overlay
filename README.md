@@ -18,9 +18,9 @@ The overlay automatically shows itself when the TF2 window is focused and hides 
 
 ## Showcase
 
-<div align="center">
-  <video src="src/showcase.mp4" width="75%" controls autoplay muted loop></video>
-</div>
+<p align="center">
+  <img src="src/showcase.gif" width="50%" alt="TF2 Queue Timer showcase" />
+</p>
 
 ## Usage
 
