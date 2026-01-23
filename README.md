@@ -1,4 +1,4 @@
-# TF2 Queue Overlay
+# TF2 Queue Timer
 
 A simple overlay utility for Team Fortress 2 that tracks how long you have been queueing for a match.
 
