@@ -133,8 +133,11 @@ def _get_focused_pid() -> Optional[int]:
             capture_output=True,
             text=True,
             check=True,
+            timeout=0.25,
         )
         return int(result.stdout.strip())
+    except (subprocess.TimeoutExpired, ValueError, OSError):
+        return None
     except Exception:
         return None
 

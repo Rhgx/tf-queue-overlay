@@ -26,10 +26,30 @@ The overlay automatically shows itself when the TF2 window is focused and hides 
 
 1.  Ensure Team Fortress 2 is installed via Steam.
 2.  **Important**: Add `-condebug` to your TF2 launch options (Library -> Right-click TF2 -> Properties -> Launch Options).
-3.  Run the executable (`TF2QueueTimer.exe`).
+3.  Run the executable (`TF2QueueTimer.exe` on Windows, `TF2QueueTimer` on Linux).
 4.  The program will run in the system tray.
 5.  Launch Team Fortress 2.
 6.  Join a casual queue to see the timer in action.
+
+## Linux Notes
+
+This app supports Linux (Ubuntu/Debian and Arch) and expects Steam to be installed in one of the default locations:
+
+- `~/.local/share/Steam`
+- `~/.steam/steam`
+
+For automatic focus detection (show overlay only when TF2 is focused), install `xdotool`:
+
+- **Ubuntu/Debian**: `sudo apt install xdotool`
+- **Arch**: `sudo pacman -S xdotool`
+
+If `xdotool` is not available, the overlay will stay visible while TF2 is running.
+
+## Build (Linux)
+
+1.  Install dependencies: `pip install -r requirements.txt`
+2.  Build with PyInstaller: `python build.py`
+3.  Output is in `dist/TF2QueueTimer/`
 
 ## Configuration
 
