@@ -30,13 +30,14 @@ def main():
             print(f"ERROR: {asset} not found!")
             sys.exit(1)
     
+    data_sep = ";" if sys.platform.startswith("win") else ":"
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--name", "TF2QueueTimer",
         "--windowed",
         "--icon", "icon.ico",
-        "--add-data", "icon.ico;.",
-        "--add-data", "font.ttf;.",
+        "--add-data", f"icon.ico{data_sep}.",
+        "--add-data", f"font.ttf{data_sep}.",
         "--noconfirm",
         "--clean",
         "main.py",
@@ -53,7 +54,10 @@ def main():
     print("Build complete!")
     print()
     print("Output: dist/TF2QueueTimer/")
-    print("  ├── TF2QueueTimer.exe")
+    if sys.platform.startswith("win"):
+        print("  ├── TF2QueueTimer.exe")
+    else:
+        print("  ├── TF2QueueTimer")
     print("  ├── font.ttf, icon.ico")
     print("  ├── settings.json       (created on first run)")
     print("  └── _internal/          (dependencies)")

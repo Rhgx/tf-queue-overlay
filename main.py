@@ -5,17 +5,24 @@ import csv
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import time
-import winreg
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 import psutil
-import win32gui
-import win32process
 from PySide6 import QtCore, QtGui, QtWidgets
+
+IS_WINDOWS = sys.platform.startswith("win")
+IS_LINUX = sys.platform.startswith("linux")
+
+if IS_WINDOWS:
+    import winreg
+    import win32gui
+    import win32process
 
 
 def get_app_dir() -> Path:
@@ -41,7 +48,7 @@ LOCK_PATH = APP_DIR / ".lock"
 
 DEFAULT_SETTINGS = {"pos": [24, 24], "opacity": 0.5, "font_size": 22, "save_csv": False, "wait_period": 20.0}
 CSV_PATH = APP_DIR / "queue_log.csv"
-TF2_PROCESS_NAME = "tf_win64.exe"
+TF2_PROCESS_NAMES = ["tf_win64.exe"] if IS_WINDOWS else ["tf_linux64", "hl2_linux"]
 
 QUEUE_START_PATTERN = re.compile(
     r"^\[PartyClient\] (?:Requesting queue for|Entering queue for match group) .*Casual Match\b"
@@ -96,36 +103,100 @@ def save_queue_to_csv(duration_seconds: float, map_name: Optional[str]) -> None:
         pass
 
 
-def is_tf2_focused() -> bool:
+_xdotool_warned = False
+
+
+def is_tf2_running() -> bool:
     try:
-        hwnd = win32gui.GetForegroundWindow()
-        if not hwnd:
-            return False
-        _, pid = win32process.GetWindowThreadProcessId(hwnd)
-        return psutil.Process(pid).name().lower() == TF2_PROCESS_NAME
+        names = {name.lower() for name in TF2_PROCESS_NAMES}
+        for proc in psutil.process_iter(["name"]):
+            name = (proc.info.get("name") or "").lower()
+            if name in names:
+                return True
     except Exception:
-        return False
+        pass
+    return False
+
+
+def _warn_xdotool_missing() -> None:
+    global _xdotool_warned
+    if _xdotool_warned:
+        return
+    _xdotool_warned = True
+    print("Warning: xdotool not found. Overlay visibility will follow TF2 process.", file=sys.stderr)
+
+
+def _get_focused_pid() -> Optional[int]:
+    try:
+        result = subprocess.run(
+            ["xdotool", "getwindowfocus", "getwindowpid"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return int(result.stdout.strip())
+    except Exception:
+        return None
+
+
+def is_tf2_focused() -> bool:
+    if IS_WINDOWS:
+        try:
+            hwnd = win32gui.GetForegroundWindow()
+            if not hwnd:
+                return False
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            return psutil.Process(pid).name().lower() in {n.lower() for n in TF2_PROCESS_NAMES}
+        except Exception:
+            return False
+    if shutil.which("xdotool") is None:
+        _warn_xdotool_missing()
+        return is_tf2_running()
+    pid = _get_focused_pid()
+    if not pid:
+        return is_tf2_running()
+    try:
+        return psutil.Process(pid).name().lower() in {n.lower() for n in TF2_PROCESS_NAMES}
+    except Exception:
+        return is_tf2_running()
 
 
 def get_steam_path() -> Optional[Path]:
-    for root, subkey, value in [
-        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath"),
-        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Valve\Steam", "InstallPath"),
-        (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Valve\Steam", "SteamPath"),
-    ]:
-        try:
-            key = winreg.OpenKey(root, subkey)
-            val, _ = winreg.QueryValueEx(key, value)
-            winreg.CloseKey(key)
-            p = Path(val)
+    if IS_WINDOWS:
+        for root, subkey, value in [
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Valve\Steam", "InstallPath"),
+            (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Valve\Steam", "SteamPath"),
+        ]:
+            try:
+                key = winreg.OpenKey(root, subkey)
+                val, _ = winreg.QueryValueEx(key, value)
+                winreg.CloseKey(key)
+                p = Path(val)
+                if p.exists() and (p / "steam.exe").exists():
+                    return p
+            except OSError:
+                continue
+        for p in [
+            Path(r"C:\Program Files (x86)\Steam"),
+            Path(r"C:\Program Files\Steam"),
+            Path(r"D:\Steam"),
+            Path(r"D:\SteamLibrary"),
+            Path(r"E:\Steam"),
+            Path(r"E:\SteamLibrary"),
+        ]:
             if p.exists() and (p / "steam.exe").exists():
                 return p
-        except OSError:
-            continue
-    for p in [Path(r"C:\Program Files (x86)\Steam"), Path(r"C:\Program Files\Steam"),
-              Path(r"D:\Steam"), Path(r"D:\SteamLibrary"), Path(r"E:\Steam"), Path(r"E:\SteamLibrary")]:
-        if p.exists() and (p / "steam.exe").exists():
-            return p
+        return None
+    if IS_LINUX:
+        candidates = [
+            Path.home() / ".local" / "share" / "Steam",
+            Path.home() / ".steam" / "steam",
+        ]
+        for p in candidates:
+            if p.exists() and (p / "steamapps").exists():
+                return p
+        return None
     return None
 
 
