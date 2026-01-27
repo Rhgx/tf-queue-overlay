@@ -3,8 +3,10 @@
 A simple overlay utility for Team Fortress 2 that tracks how long you have been queueing for a match.
 
 > [!NOTE]
+> This program clears your TF2 `console.log` file on every start-up to prevent it from getting bloated.
+>
 > Windows may flag this program as suspicious because it is not digitally signed. You can verify that the file is safe by checking it on VirusTotal:
-> [VirusTotal Scan Result](https://www.virustotal.com/gui/file-analysis/MDgzNDBmNGE3Nzc0OGU4ZjBjNzc5NmM0Y2E2MWMxYmI6MTc2ODc3MDk5NQ==)
+> [VirusTotal Scan Result](https://www.virustotal.com/gui/file-analysis/MzhmOWI0ZjMyMGUwMjdjODA5MTkzMDM2ZWFkZTU3MDg6MTc2OTE4MDY5Nw==)
 
 ## How it Works
 
